@@ -19,6 +19,7 @@ modules:
       boards: boards
       config: config
       prj.conf: prj.conf
+      controller: controller
 
 
 

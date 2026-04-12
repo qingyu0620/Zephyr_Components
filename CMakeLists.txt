@@ -13,7 +13,6 @@ project(blinky)
 set(APP_SOURCE_DIRS
     apps
     communication
-    controller
     src
     thread
     # src/xxx
@@ -23,7 +22,6 @@ set(APP_SOURCE_DIRS
 set(APP_INCLUDE_DIRS
     apps
     communication
-    controller
     src
     thread
     topic
@@ -36,8 +34,22 @@ foreach(dir ${APP_SOURCE_DIRS})
     list(APPEND APP_SOURCES ${DIR_SOURCES})
 endforeach()
 
+# 递归搜索头文件子目录
+set(ALL_INCLUDE_DIRS)
+foreach(dir ${APP_INCLUDE_DIRS})
+    if(IS_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${dir})
+        list(APPEND ALL_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/${dir})
+        file(GLOB_RECURSE HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/${dir}/*.h ${CMAKE_CURRENT_SOURCE_DIR}/${dir}/*.hpp)
+        foreach(header ${HEADERS})
+            get_filename_component(header_dir ${header} DIRECTORY)
+            list(APPEND ALL_INCLUDE_DIRS ${header_dir})
+        endforeach()
+    endif()
+endforeach()
+list(REMOVE_DUPLICATES ALL_INCLUDE_DIRS)
+
 target_sources(app PRIVATE ${APP_SOURCES})
-target_include_directories(app PRIVATE ${APP_INCLUDE_DIRS})
+target_include_directories(app PRIVATE ${ALL_INCLUDE_DIRS})
 
 # bsp/ 和 modules/ 通过 mod_init.py 从 Zephyr_Components 仓库拉取
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/bsp)
@@ -46,18 +58,17 @@ endif()
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/modules)
   add_subdirectory(modules)
 endif()
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/EmbedKit)
-  add_subdirectory(EmbedKit)
-  target_link_libraries(app PRIVATE embedkit)
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/controller)
+  add_subdirectory(controller)
 endif()
 
-# 按实际拉取的模块链接
-if(TARGET mod_led)
-  target_link_libraries(app PRIVATE mod_led)
-endif()
-if(TARGET mod_key)
-  target_link_libraries(app PRIVATE mod_key)
-endif()
+# 自动链接所有扫描到的模块和控制器
+foreach(mod ${MODULE_TARGETS})
+  target_link_libraries(app PRIVATE ${mod})
+endforeach()
+foreach(ctrl ${CONTROLLER_TARGETS})
+  target_link_libraries(app PRIVATE ${ctrl})
+endforeach()
 
 
 

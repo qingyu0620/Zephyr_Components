@@ -28,9 +28,7 @@
  */
 #pragma once
 
-#include "zephyr/kernel/thread_stack.h"
 #include <zephyr/kernel.h>
-#include <stdint.h>
 
 template<typename T, uint8_t N, size_t StackSize = 256>
 class Thread
@@ -49,8 +47,8 @@ public:
                         entry, this, nullptr, nullptr, prio, 0, K_NO_WAIT);
     }
 
-    T& operator[](uint8_t i) { return items_[i]; }
-    const T& operator[](uint8_t i) const { return items_[i]; }
+    T& operator[](uint8_t i) { return items_[i < used_ ? i : 0]; }
+    const T& operator[](uint8_t i) const { return items_[i < used_ ? i : 0]; }
     uint8_t Count() const { return used_; }
 
 private:
