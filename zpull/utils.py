@@ -19,7 +19,11 @@ def load_yaml(path: Path) -> dict:
 
 
 def run_git(args, cwd=None):
-    subprocess.run(["git"] + args, check=True,
-                   stdin=subprocess.DEVNULL,
-                   stdout=subprocess.DEVNULL,
-                   stderr=subprocess.DEVNULL, cwd=cwd)
+    p = subprocess.Popen(["git"] + args, cwd=cwd,
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        ret = p.wait(timeout=30)
+    except subprocess.TimeoutExpired:
+        p.kill(); p.wait(); return
+    if ret != 0:
+        raise subprocess.CalledProcessError(ret, ["git"] + args)

@@ -26,9 +26,16 @@ class Repo:
 
     def sparse_add(self, paths: list):
         r = subprocess.run(["git", "sparse-checkout", "list"],
-                           capture_output=True, text=True, cwd=str(self.dir))
+                           capture_output=True, text=True,
+                           stdin=subprocess.DEVNULL, cwd=str(self.dir))
         existing = set(r.stdout.strip().splitlines()) if r.returncode == 0 else set()
-        new = set(paths) - existing
+        new = set()
+        for p in paths:
+            if p in existing:
+                continue
+            if any(p.startswith(e + "/") for e in existing):
+                continue
+            new.add(p)
         if not new:
             return
         print(f"  [sparse+] +{sorted(new)}")
