@@ -1,11 +1,22 @@
 cmake_minimum_required(VERSION 3.20.0)
-set(BOARD ek_ra2l1)
-set(BOARD_FLASH_RUNNER pyocd)
-set(BOARD_DEBUG_RUNNER pyocd)
-set(BOARD_RUNNER_ARGS_pyocd "--frequency=1000000")
-# 如需使用 JLink, 将上面两行的 pyocd 改为 jlink
-# 如需使用 DAP-Link (OpenOCD), 改为 openocd 并添加:
-# set(BOARD_RUNNER_ARGS_openocd "--config=${CMAKE_CURRENT_SOURCE_DIR}/config/openocd_dap.cfg")
+
+if(DEFINED BOARD)
+    # 使用命令行指定的 BOARD
+elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/boards/stm32f4_disco.overlay")
+    set(BOARD stm32f4_disco)
+else()
+    set(BOARD ek_ra2l1)
+endif()
+
+if(BOARD STREQUAL "ek_ra2l1")
+    set(BOARD_FLASH_RUNNER pyocd)
+    set(BOARD_DEBUG_RUNNER pyocd)
+    set(BOARD_RUNNER_ARGS_pyocd "--frequency=1000000")
+elseif(BOARD STREQUAL "stm32f4_disco")
+    set(BOARD_FLASH_RUNNER openocd)
+    set(BOARD_DEBUG_RUNNER openocd)
+    set(BOARD_RUNNER_ARGS_openocd "--config=${CMAKE_CURRENT_SOURCE_DIR}/config/openocd_dap.cfg" "--cmd-post-verify=reset run")
+endif()
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(blinky)
 
@@ -62,7 +73,10 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/controller)
   add_subdirectory(controller)
 endif()
 
-# 自动链接所有扫描到的模块和控制器
+# 自动链接所有扫描到的 bsp、模块和控制器
+foreach(bsp ${BSP_TARGETS})
+  target_link_libraries(app PRIVATE ${bsp})
+endforeach()
 foreach(mod ${MODULE_TARGETS})
   target_link_libraries(app PRIVATE ${mod})
 endforeach()

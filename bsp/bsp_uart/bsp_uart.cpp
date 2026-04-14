@@ -32,9 +32,11 @@ static void uart_async_cb(const device* dev, uart_event* evt, void* user_data)
     {
         case UART_RX_RDY:
         {
-            rx_store(obj, evt->data.rx.buf + evt->data.rx.offset, evt->data.rx.len);
+            const uint8_t* data = evt->data.rx.buf + evt->data.rx.offset;
+            uint16_t len = evt->data.rx.len;
+            rx_store(obj, data, len);
             if (obj.rx_cb) {
-                obj.rx_cb(evt->data.rx.buf + evt->data.rx.offset, evt->data.rx.len, obj.rx_cb_arg);
+                obj.rx_cb(data, len, obj.rx_cb_arg);
             }
             break;
         }
@@ -46,7 +48,13 @@ static void uart_async_cb(const device* dev, uart_event* evt, void* user_data)
         }
         case UART_RX_DISABLED:
         {
+            obj.cur_buf = 1 - obj.cur_buf;
             uart_rx_enable(dev, obj.dma_buf[obj.cur_buf], BSP_UART_RX_BUF_SIZE, obj.rx_timeout);
+            break;
+        }
+        case UART_TX_DONE:
+        {
+            k_sem_give(&obj.tx_sem);
             break;
         }
         default:
@@ -65,6 +73,7 @@ int bsp_uart_init(BspUartObj& obj, const device* dev, uint32_t rx_timeout)
     obj.tail       = 0;
     obj.cur_buf    = 0;
     obj.rx_timeout = rx_timeout;
+    k_sem_init(&obj.tx_sem, 1, 1);
 
     if (!device_is_ready(dev)) {
         return -ENODEV;
@@ -94,6 +103,9 @@ int bsp_uart_send(const BspUartObj& obj, const uint8_t* data, uint16_t len)
 {
     if (!obj.ready) {
         return -ENODEV;
+    }
+    if (k_sem_take(const_cast<k_sem*>(&obj.tx_sem), K_FOREVER) != 0) {
+        return -EBUSY;
     }
     return uart_tx(obj.dev, data, len, SYS_FOREVER_US);
 }

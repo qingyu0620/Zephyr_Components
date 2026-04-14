@@ -12,6 +12,7 @@
 #pragma once
 
 #include <zephyr/drivers/uart.h>
+#include <zephyr/kernel.h>
 
 constexpr uint16_t BSP_UART_RX_BUF_SIZE = 128;
 
@@ -19,8 +20,8 @@ using BspUartRxCallback = void (*)(const uint8_t* data, uint16_t len, void* arg)
 
 struct BspUartObj
 {
-    const device* dev;
-    uint8_t dma_buf[2][BSP_UART_RX_BUF_SIZE];
+    const device* dev = nullptr;
+    uint8_t dma_buf[2][BSP_UART_RX_BUF_SIZE]{};
     uint8_t rx_buf[BSP_UART_RX_BUF_SIZE * 2];
     uint16_t head = 0;
     uint16_t tail = 0;
@@ -28,6 +29,7 @@ struct BspUartObj
     BspUartRxCallback rx_cb = nullptr;
     void* rx_cb_arg = nullptr;
     uint32_t rx_timeout = 10000;
+    k_sem tx_sem;
     bool ready = false;
 };
 
@@ -36,3 +38,18 @@ void bsp_uart_set_rx_callback(BspUartObj& obj, BspUartRxCallback cb, void* arg =
 int  bsp_uart_send(const BspUartObj& obj, const uint8_t* data, uint16_t len);
 int  bsp_uart_read(BspUartObj& obj, uint8_t* data, uint16_t len);
 uint16_t bsp_uart_available(const BspUartObj& obj);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

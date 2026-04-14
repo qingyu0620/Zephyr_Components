@@ -78,7 +78,7 @@ def main():
         if not args.paths:
             sparse = mod.get("sparse", None)
         else:
-            sparse = build_sparse_list(args.paths, always, None)
+            sparse = list(args.paths)
 
         if tmp.exists():
             rmtree(tmp)
