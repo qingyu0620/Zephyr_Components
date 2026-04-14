@@ -7,6 +7,8 @@
     python -m zpull modules/led                # 拉模块 + 依赖 + 骨架
     python -m zpull modules/led bsp/bsp_i2c    # 拉多个
     python -m zpull --push-tag uart            # 当前项目快照打标签推送
+    python -m zpull list tags                   # 列出远程标签
+    python -m zpull list modules                # 列出可用模块
     python -m zpull --config modules.yaml      # 指定配置文件
 """
 
@@ -44,6 +46,71 @@ def _git(args, cwd, capture=False, show=False):
 def _should_exclude(path: str) -> bool:
     parts = path.replace("\\", "/").split("/")
     return bool(EXCLUDE & set(parts))
+
+
+def list_tags(cfg_path: Path):
+    mod = load_yaml(cfg_path).get("modules", [None])[0]
+    if not mod:
+        print("错误: modules.yaml 中没有模块定义")
+        sys.exit(1)
+
+    repo_url = mod["repo"]
+    print(f"仓库: {repo_url}")
+    print(f"\n标签 (Tags):")
+    r = subprocess.run(
+        ["git", "ls-remote", "--tags", repo_url],
+        capture_output=True, text=True, stdin=subprocess.DEVNULL
+    )
+    if r.returncode == 0 and r.stdout.strip():
+        for line in r.stdout.strip().splitlines():
+            tag = line.split("refs/tags/")[-1]
+            if not tag.endswith("^{}"):
+                print(f"  {tag}")
+    else:
+        print("  (无)")
+
+
+def list_modules(cfg_path: Path):
+    mod = load_yaml(cfg_path).get("modules", [None])[0]
+    if not mod:
+        print("错误: modules.yaml 中没有模块定义")
+        sys.exit(1)
+
+    repo_url = mod["repo"]
+    ref = mod.get("ref", "main")
+    root = cfg_path.parent.parent
+
+    print(f"仓库: {repo_url}")
+    print(f"\n模块 (ref: {ref}):")
+
+    tmp = root / ".tmp_list"
+    r = subprocess.run(
+        ["git", "clone", "--no-checkout", "--depth", "1",
+         "--filter=blob:none", "--branch", ref,
+         repo_url, str(tmp)],
+        capture_output=True, text=True, stdin=subprocess.DEVNULL
+    )
+    if r.returncode != 0:
+        print("  (克隆失败)")
+        return
+
+    r = subprocess.run(
+        ["git", "ls-tree", "-d", "--name-only", "-r", "HEAD"],
+        capture_output=True, text=True, stdin=subprocess.DEVNULL,
+        cwd=str(tmp)
+    )
+    rmtree(tmp)
+
+    module_prefixes = ("bsp/", "modules/", "controller/")
+    if r.returncode == 0 and r.stdout.strip():
+        dirs = r.stdout.strip().splitlines()
+        for d in sorted(dirs):
+            if d.startswith(module_prefixes):
+                parts = d.split("/")
+                if len(parts) == 2:
+                    print(f"  {d}")
+    else:
+        print("  (无法获取)")
 
 
 def push_tag(tag: str, root: Path):
@@ -111,11 +178,51 @@ def main():
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parent.parent
-    cfg_path = Path(args.config) if args.config else root / "modules.yaml"
+    zpull_dir = Path(__file__).resolve().parent
+    cfg_path = Path(args.config) if args.config else zpull_dir / "modules.yaml"
 
     # --- --push-tag 模式 ---
     if args.push_tag:
         push_tag(args.push_tag, root)
+        return
+
+    # --- list 子命令 ---
+    if args.paths and args.paths[0] == "list":
+        if not cfg_path.exists():
+            print(f"错误: 找不到 {cfg_path}")
+            sys.exit(1)
+        what = args.paths[1] if len(args.paths) > 1 else None
+        if what == "tags":
+            list_tags(cfg_path)
+        elif what == "modules":
+            list_modules(cfg_path)
+        else:
+            print("用法: python -m zpull list tags|modules")
+        return
+
+    # --- help 子命令 ---
+    if args.paths and args.paths[0] == "help":
+        print("""zpull — Zephyr 轻量模块依赖管理工具
+
+拉取模块:
+  python -m zpull modules/led              拉取单个模块 + 依赖
+  python -m zpull modules/led bsp/bsp_i2c  拉取多个模块
+  python -m zpull                          拉取 modules.yaml 中 sparse 列表的所有模块
+
+拉取标签 (完整项目快照):
+  python -m zpull --tag template           拉取空骨架
+  python -m zpull --tag uart               拉取 uart 标签版本
+
+上传标签:
+  python -m zpull --push-tag uart          当前项目快照打标签推送 (不影响 main)
+
+查询:
+  python -m zpull list tags                列出远程仓库的所有标签
+  python -m zpull list modules             列出可拉取的模块
+
+其他:
+  python -m zpull --config path.yaml ...   指定配置文件
+  python -m zpull help                     显示此帮助""")
         return
 
     if not cfg_path.exists():
