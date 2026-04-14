@@ -12,7 +12,7 @@
     python -m zpull --config modules.yaml      # 指定配置文件
 """
 
-import argparse, subprocess, sys
+import argparse, os, subprocess, sys
 from pathlib import Path
 from .utils import load_yaml, rmtree
 from .repo import Repo
@@ -128,7 +128,11 @@ def push_tag(tag: str, root: Path):
         print("错误: 当前处于游离 HEAD，请先 checkout 到分支")
         sys.exit(1)
 
-    # --- 1. 提交模块更新 (修改 + 新增, 不含删除) 到当前分支 ---
+    # --- 1. 记录当前被删除的文件 ---
+    r = _git(["diff", "--name-only", "--diff-filter=D"], root, capture=True)
+    deleted_files = [f for f in r.stdout.strip().splitlines() if f]
+
+    # --- 2. 提交模块更新 (修改 + 新增, 不含删除) 到当前分支 ---
     r = _git(["diff", "--name-only", "--diff-filter=d"], root, capture=True)
     modified = [f for f in r.stdout.strip().splitlines() if f]
 
@@ -147,7 +151,7 @@ def push_tag(tag: str, root: Path):
     else:
         print(f"[push-tag] 无模块更新需要推送到 {branch}")
 
-    # --- 2. 游离 HEAD 创建标签 ---
+    # --- 3. 游离 HEAD 创建标签 ---
     print(f"[push-tag] 创建标签 '{tag}'")
     _git(["checkout", "--detach"], root)
 
@@ -162,9 +166,20 @@ def push_tag(tag: str, root: Path):
     _git(["push", "origin", tag], root, show=True)
     print(f"  标签 '{tag}' 已推送")
 
-    # --- 3. 返回原分支 ---
+    # --- 4. 返回原分支, 重新删除之前被删的文件 ---
     _git(["checkout", branch], root)
-    print(f"  已返回 {branch} 分支 (工作区已恢复)")
+    if deleted_files:
+        for f in deleted_files:
+            p = root / f.replace("/", os.sep)
+            if p.exists():
+                p.unlink()
+        # 清理空目录
+        for f in deleted_files:
+            d = (root / f.replace("/", os.sep)).parent
+            while d != root and d.exists() and not any(d.iterdir()):
+                d.rmdir()
+                d = d.parent
+    print(f"  已返回 {branch} 分支 (工作区保持不变)")
     print("\n=== 完成 ===")
 
 
